@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
+
+# Modified to avoid the creation of a new docker image, if the state of Arch
+# repos hasn’t changed since that of the last image created and still available.
+
 # Generate a minimal filesystem for archlinux and load it into the local
 # docker as "archlinux"
 # requires root
 set -e
 
-hash pacstrap &>/dev/null || {
+hash ./pacstrap &>/dev/null || {
 	echo "Could not find pacstrap. Run pacman -S arch-install-scripts"
 	exit 1
 }
@@ -16,7 +20,9 @@ hash expect &>/dev/null || {
 
 export LANG="C.UTF-8"
 
-ROOTFS=$(mktemp -d ${TMPDIR:-/var/tmp}/rootfs-archlinux-XXXXXXXXXX)
+TMPDIR=${TMPDIR:-/var/tmp}
+TMPREPSLBL=$(mktemp $TMPDIR/repos_label-XXXXXXXXXX)
+ROOTFS=$(mktemp -d $TMPDIR/rootfs-archlinux-XXXXXXXXXX)
 chmod 755 $ROOTFS
 
 # packages to ignore for space savings
@@ -47,21 +53,43 @@ IFS=','
 PKGIGNORE="${PKGIGNORE[*]}"
 unset IFS
 
-expect <<EOF
-	set send_slow {1 .1}
-	proc send {ignore arg} {
-		sleep .1
-		exp_send -s -- \$arg
-	}
-	set timeout 60
+function initialize()
+{
+  expect <<EOF
+          set send_slow {1 .1}
+          proc send {ignore arg} {
+                  sleep .1
+                  exp_send -s -- \$arg
+          }
+          set timeout 60
 
-	spawn pacstrap -C ./mkimage-arch-pacman.conf -c -d -G -i $ROOTFS base haveged --ignore $PKGIGNORE
-	expect {
-		-exact "anyway? \[Y/n\] " { send -- "n\r"; exp_continue }
-		-exact "(default=all): " { send -- "\r"; exp_continue }
-		-exact "installation? \[Y/n\]" { send -- "y\r"; exp_continue }
-	}
+          spawn ./pacstrap -C ./mkimage-arch-pacman.conf -c -d -G -i $ROOTFS base haveged --ignore $PKGIGNORE
+          set pacstrap_spawn_id \$spawn_id
+
+          expect -re {^.*Repos state label: ([a-f0-9]*)\. Continue\? \[y/n\] } {
+                   set label \$expect_out(1,string)
+                   puts [open $TMPREPSLBL w] \$label
+                   spawn -noecho docker inspect archlinux-\$label
+                   lassign [wait] pid docker_spawn_id osexitcode docker_spawnexitcode
+                   set spawn_id \$pacstrap_spawn_id
+                   if {\$docker_spawnexitcode == 0} {
+                     send -- "n\r"
+                     puts "\nAn image with repos label \$label already exists. Exiting."
+                     exit 1
+                   } else {
+                     send -- "y\r"
+                   }
+                 }
+
+          expect {
+                  -exact "anyway? \[Y/n\] " { send -- "n\r"; exp_continue }
+                  -exact "(default=all): " { send -- "\r"; exp_continue }
+                  -exact "installation? \[Y/n\]" { send -- "y\r"; exp_continue }
+          }
 EOF
+}
+
+initialize
 
 arch-chroot $ROOTFS /bin/sh -c 'rm -r /usr/share/man/*'
 arch-chroot $ROOTFS /bin/sh -c "haveged -w 1024; pacman-key --init; pkill haveged; pacman -Rs --noconfirm haveged; pacman-key --populate archlinux; pkill gpg-agent"
@@ -88,6 +116,8 @@ mknod -m 600 $DEV/initctl p
 mknod -m 666 $DEV/ptmx c 5 2
 ln -sf /proc/self/fd $DEV/fd
 
-tar --numeric-owner --xattrs --acls -C $ROOTFS -c . | docker import - archlinux
-docker run -t archlinux echo Success.
+REPOS_LABEL=$(cat $TMPREPSLBL)
+tar --numeric-owner --xattrs --acls -C $ROOTFS -c . | docker import - archlinux-$REPOS_LABEL
+docker run -t archlinux-$REPOS_LABEL echo Success.
 rm -rf $ROOTFS
+rm $TMPREPSLBL

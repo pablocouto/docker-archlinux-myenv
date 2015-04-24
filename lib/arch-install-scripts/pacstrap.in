@@ -78,21 +78,23 @@ newroot=$1; shift
 pacman_args=("${@:-base}")
 
 if (( ! hostcache )); then
-  pacman_args+=(--cachedir="$newroot/var/cache/pacman/pkg")
+  plusopts+=(--cachedir="$newroot/var/cache/pacman/pkg")
 fi
 
 if (( ! interactive )); then
-  pacman_args+=(--noconfirm)
+  plusopts+=(--noconfirm)
 fi
 
 if [[ $pacman_config ]]; then
-  pacman_args+=(--config="$pacman_config")
+  plusopts+=(--config="$pacman_config")
 fi
 
 [[ -d $newroot ]] || die "%s is not a directory" "$newroot"
 if ! mountpoint -q "$newroot" && (( ! directory )); then
   die '%s is not a mountpoint!' "$newroot"
 fi
+
+pacman_args+=($plusopts)
 
 # create obligatory directories
 msg 'Creating install root at %s' "$newroot"
@@ -102,6 +104,21 @@ mkdir -m 0555 -p "$newroot"/{sys,proc}
 
 # mount API filesystems
 chroot_setup "$newroot" || die "failed to setup chroot %s" "$newroot"
+
+msg 'Syncing repositories'
+pacman -r "$newroot" "$plusopts" -Sy
+
+# to label the state of the synced repos
+repos_id=$(md5sum $newroot/var/lib/pacman/sync/core.db \
+                  $newroot/var/lib/pacman/sync/extra.db \
+                  $newroot/var/lib/pacman/sync/community.db \
+             | cut -d' ' -f1 | md5sum - | cut -c1-7)
+printf '==> Repos state label: %s. Continue? [y/n] ' "$repos_id"
+read yn
+case $yn in
+    [Yy]* ) ;;
+    [Nn]* ) exit 0;;
+esac
 
 msg 'Installing packages to %s' "$newroot"
 if ! pacman -r "$newroot" -Sy "${pacman_args[@]}"; then
