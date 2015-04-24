@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Copyright 2012-2015 Docker, Inc.
+# Copyright 2015 Pablo Couto
+
 # Modified to avoid the creation of a new docker image, if the state of Arch
 # repos hasn’t changed since that of the last image created and still available.
 

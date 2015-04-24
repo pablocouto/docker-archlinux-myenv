@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Copyright 2012-2015 Dave Reisner
+# Copyright 2015 Pablo Couto
+
 #
 # Assumptions:
 #  1) User has partitioned, formatted, and mounted partitions on /mnt
