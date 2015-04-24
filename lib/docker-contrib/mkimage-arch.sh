@@ -119,5 +119,6 @@ ln -sf /proc/self/fd $DEV/fd
 REPOS_LABEL=$(cat $TMPREPSLBL)
 tar --numeric-owner --xattrs --acls -C $ROOTFS -c . | docker import - archlinux-$REPOS_LABEL
 docker run -t archlinux-$REPOS_LABEL echo Success.
+sed -i -e "s/^FROM archlinux-[a-f0-9]*$/FROM archlinux-$REPOS_LABEL/g" Dockerfile
 rm -rf $ROOTFS
 rm $TMPREPSLBL
