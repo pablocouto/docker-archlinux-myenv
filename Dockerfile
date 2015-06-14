@@ -38,4 +38,16 @@ RUN echo "AllowUsers pablo" >> /etc/ssh/sshd_config; \
     chmod 600 /home/pablo/.ssh/*; \
     echo "pablo:pablo" | chpasswd
 
+# installs yaourt
+USER pablo
+WORKDIR /home/pablo/
+RUN curl -s https://aur.archlinux.org/packages/pa/package-query/package-query.tar.gz \
+      | tar zxf -; \
+    cd package-query; makepkg --noconfirm --needed -is; cd ..; \
+    curl -s https://aur.archlinux.org/packages/ya/yaourt/yaourt.tar.gz \
+      | tar zxf -; \
+    cd yaourt; makepkg --noconfirm --needed -is; cd ..; \
+    rm -rf package-query yaourt
+
+USER root
 CMD ["/usr/bin/sshd", "-D"]
