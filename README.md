@@ -7,7 +7,7 @@ $ cd ../../
 $ sudo ./mkimage-arch.sh
 ```
 
-- Creating a `custom` image, based on the above one, and running a container from it (`authorized_keys` and `secret.pem` need to be properly set, e.g. with `ssh-keygen`):
+- Creating a `custom` image, based on the above one, and running a container from it (`authorized_keys` and `key` need to be properly set, e.g. with `ssh-keygen`):
 
 ```bash
 $ docker build -t custom .
